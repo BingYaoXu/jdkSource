@@ -341,6 +341,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
     /**
      * Returns x's Class if it is of the form "class C implements
      * Comparable<C>", else null.
+     * 如果参数x类时Comparable的实现类则返回x的类型，否则返回null
      */
     static Class<?> comparableClassFor(Object x) {
         if (x instanceof Comparable) {
@@ -364,6 +365,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
     /**
      * Returns k.compareTo(x) if x matches kc (k's screened comparable
      * class), else 0.
+     * 若x的类不同于kc则返回0，若相同则执行compareTo方法比较k和x
      */
     @SuppressWarnings({"rawtypes","unchecked"}) // for cast to Comparable
     static int compareComparables(Class<?> kc, Object k, Object x) {
@@ -1887,6 +1889,8 @@ public class HashMap<K,V> extends AbstractMap<K,V>
          * order, just a consistent insertion rule to maintain
          * equivalence across rebalancings. Tie-breaking further than
          * necessary simplifies testing a bit.
+         * 当hashCodes相等且键非Comaprable接口实现类时，Tie-breaking用于插入排序。
+         * 我们不要求一个总的顺序，只需要一个一致的插入规则来保持重新平衡中的等价行。
          */
         static int tieBreakOrder(Object a, Object b) {
             int d;
@@ -1967,32 +1971,56 @@ public class HashMap<K,V> extends AbstractMap<K,V>
         final TreeNode<K,V> putTreeVal(HashMap<K,V> map, Node<K,V>[] tab,
                                        int h, K k, V v) {
             Class<?> kc = null;
+//            标记是否找到了这个key对应的节点
             boolean searched = false;
+            /*找到当前节点的根节点*/
             TreeNode<K,V> root = (parent != null) ? root() : this;
+            /*从根节点开始遍历红黑树*/
             for (TreeNode<K,V> p = root;;) {
+//                dir即direction，用于标记传入元素实在当前节点的左边还是右边
+//                ph即p.hash，乃是当前节点的hash值
+//                同样的pk即p.key，为当前节点的key
                 int dir, ph; K pk;
                 if ((ph = p.hash) > h)
+//                    将当前节点的hash值赋给ph，并且与传入hash值进行比较，
+                    // 若当前节点hash值大于传入hash值则说明传入元素在左边
                     dir = -1;
                 else if (ph < h)
+                    //若当前节点的hash值小于传入的元素hash值，
+//                    说明传入元素应该在右边
                     dir = 1;
                 else if ((pk = p.key) == k || (k != null && k.equals(pk)))
+//                    若当前节点hsh值和传入hash值相等且key值也相等，则返回当前节点
+//                    回到putVal方法中进行判断是否修改此节点数据
                     return p;
-                else if ((kc == null &&
-                          (kc = comparableClassFor(k)) == null) ||
-                         (dir = compareComparables(kc, k, pk)) == 0) {
+                    //当前节点hash值和传入元素的hash值相等但是key不相等，执行括号中判断
+                else if (
+//                        初次执行到此的时候，如果传入的key是comparable的实现类则返回其类，否则返回null
+                        (kc == null && (kc = comparableClassFor(k)) == null)
+//                         如果上一行中为false（即传入的key为comparable的实现类），调用compareComparables方法，
+//                          若传入的键k和当前节点的键pk的类型不同则返回0，否则返回比较结果
+                        || (dir = compareComparables(kc, k, pk)) == 0
+                        ) {
+//综上所述，这一条件判断分支中表明在当前元素和传入元素间hash值相同键不同，其中传入元素key不是comparable类型子类或者两者类型不同，
+//如本项目中mytest.hash.Key类作为键，其类中重写了hashCode方法，每次生成的hash值都相同但键却不同，但是却不是comparable的实现类
+//红黑树中吧同样hash值的元素存储在同一颗子树，这里相当于找到了这可子树的定点，从顶点开始遍历有无待插入的key相同的元素
                     if (!searched) {
                         TreeNode<K,V> q, ch;
                         searched = true;
+                        /*遍历左右子树，找到了就返回*/
                         if (((ch = p.left) != null &&
                              (q = ch.find(h, k, kc)) != null) ||
                             ((ch = p.right) != null &&
                              (q = ch.find(h, k, kc)) != null))
                             return q;
                     }
+//                    若两者类型相同则用内存地址来计算hash值进行比较
                     dir = tieBreakOrder(k, pk);
                 }
-
+//                定义xp指向当前节点
                 TreeNode<K,V> xp = p;
+                //若dir小于等于0，则将当前节点左子节点赋给p，若为空进入判断，若不为空继续循环
+                //若dir大于0，则将当前节点右子节点赋给p，若为空进入判断，若不为空继续循环
                 if ((p = (dir <= 0) ? p.left : p.right) == null) {
                     Node<K,V> xpn = xp.next;
                     TreeNode<K,V> x = map.newTreeNode(h, k, v, xpn);
@@ -2004,6 +2032,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
                     x.parent = x.prev = xp;
                     if (xpn != null)
                         ((TreeNode<K,V>)xpn).prev = x;
+                    //todo
                     moveRootToFront(tab, balanceInsertion(root, x));
                     return null;
                 }
@@ -2214,6 +2243,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
         static <K,V> TreeNode<K,V> balanceInsertion(TreeNode<K,V> root,
                                                     TreeNode<K,V> x) {
             x.red = true;
+            /*xp当前节点的父节点，xpp：xp的父节点，xppl时xpp的左子节点，xppr时xpp右子节点*/
             for (TreeNode<K,V> xp, xpp, xppl, xppr;;) {
                 if ((xp = x.parent) == null) {
                     x.red = false;
